@@ -44,8 +44,9 @@
         h1.main-title { color: #4CAF50; margin: 0; cursor: pointer; user-select: none; transition: opacity 0.2s; }
         h1.main-title:hover { opacity: 0.8; }
         
-        #agrupacionSelect, #regionColectiva { font-size: 1em; padding: 6px 12px; border-radius: 8px; font-weight: bold; background-color: #4CAF50; color: white; border: none; outline: none; cursor: pointer; }
-        
+        #agrupacionSelect, #regionColectiva, #tipoSelect { font-size: 1em; padding: 6px 12px; border-radius: 8px; font-weight: bold; background-color: #4CAF50; color: white; border: none; outline: none; cursor: pointer; }
+        #tipoSelect { background-color: #7B1FA2; } /* púrpura para distinguirlo */
+
         #theme-btn { position: absolute; right: 0; background: var(--panel); border: 1px solid var(--border); color: var(--text); padding: 8px 12px; border-radius: 8px; cursor: pointer; font-size: 1.2em; transition: 0.2s; }
         #theme-btn:hover { transform: scale(1.1); }
         @media (max-width: 768px) { #theme-btn { position: relative; right: auto; margin-left: auto; } #top-bar { justify-content: flex-start; } }
@@ -149,6 +150,11 @@
             <option value="Nacional">Modo Nacional</option>
             <option value="Continental">Modo Continental</option>
             <option value="Mundial">Modo Mundial</option>
+        </select>
+        <!-- NUEVO: selector de tipo -->
+        <select id="tipoSelect" onchange="cambiarTipo()">
+            <option value="single" selected>⚡ Singles</option>
+            <option value="avb">📊 Medias</option>
         </select>
         <select id="regionColectiva" style="display:none;" onchange="actualizarTodasLasPestanas()"></select>
         <button id="theme-btn" onclick="toggleTheme()" title="Modo Claro/Oscuro">☀️</button>
@@ -275,6 +281,15 @@
         const grpCoun = document.getElementById('group-countries');
         wcaCountries.forEach(p => { let opt = document.createElement('option'); opt.value = p; opt.textContent = p; grpCoun.appendChild(opt); });
 
+        // ─── NUEVO ────────────────────────────────────────────────
+        function getTipo() { return document.getElementById('tipoSelect').value; }
+
+        function cambiarTipo() {
+            actualizarTodasLasPestanas();
+            actualizarURL(false);
+        }
+        // ──────────────────────────────────────────────────────────
+
         function cambiarAgrupacion() {
             const modo = document.getElementById('agrupacionSelect').value;
             const ctrlInd = document.getElementById('ctrl-individual');
@@ -356,10 +371,12 @@
             document.getElementById('btn-scrollTop').style.display = 'none';
         }
 
+        // ─── MODIFICADO: incluye 'tipo' en la URL ─────────────────
         function actualizarURL(push = true) {
             const activeTabElement = document.querySelector('.tab-btn.active');
             if(!activeTabElement) return;
             const tab = activeTabElement.id.replace('btn-tab-', '');
+            const tipo = getTipo();
             
             let wcaid = "", ev = "";
             if(tab === 'pokedex') { wcaid = document.getElementById('wcaIdPokedex').value; ev = document.getElementById('eventIdPokedex').value; }
@@ -367,14 +384,17 @@
             if(tab === 'competidor') { wcaid = document.getElementById('wcaIdCompetidor').value; }
             if(tab === 'fame') { ev = document.getElementById('eventIdFame').value; }
             
-            const stateData = { tab, wcaid, ev };
-            const newUrl = `?tab=${tab}&wcaid=${wcaid}&ev=${ev}`;
+            const stateData = { tab, wcaid, ev, tipo };
+            const newUrl = `?tab=${tab}&wcaid=${wcaid}&ev=${ev}&tipo=${tipo}`;
             
             if (push) { history.pushState(stateData, '', newUrl); } else { history.replaceState(stateData, '', newUrl); }
         }
+        // ──────────────────────────────────────────────────────────
 
+        // ─── MODIFICADO: restaura 'tipo' al navegar con back/forward ──
         window.addEventListener('popstate', (e) => {
             if (e.state && e.state.tab) {
+                if (e.state.tipo) document.getElementById('tipoSelect').value = e.state.tipo;
                 if (e.state.ev) { document.getElementById('eventIdPokedex').value = e.state.ev; document.getElementById('eventIdTop').value = e.state.ev; document.getElementById('eventIdFame').value = e.state.ev; }
                 if (e.state.wcaid) { document.getElementById('wcaIdPokedex').value = e.state.wcaid; document.getElementById('wcaIdCompetidor').value = e.state.wcaid; }
                 openTab('tab-' + e.state.tab, false);
@@ -384,6 +404,7 @@
                 if (e.state.tab === 'fame') cargarHallOfFame();
             }
         });
+        // ──────────────────────────────────────────────────────────
 
         window.addEventListener('scroll', () => {
             const btnScroll = document.getElementById('btn-scrollTop');
@@ -406,14 +427,17 @@
             }
         });
         
+        // ─── MODIFICADO: restaura 'tipo' al cargar desde URL ──────
         window.addEventListener('DOMContentLoaded', () => {
             dibujarRecientes(); cambiarAgrupacion(); 
             const params = new URLSearchParams(window.location.search);
             const tab = params.get('tab') || 'pokedex';
             const wcaid = params.get('wcaid') || '';
             const ev = params.get('ev') || '333';
-            
-            history.replaceState({ tab, wcaid, ev }, '', window.location.search);
+            const tipo = params.get('tipo') || 'single';
+
+            document.getElementById('tipoSelect').value = tipo;
+            history.replaceState({ tab, wcaid, ev, tipo }, '', window.location.search);
             
             if (params.get('ev')) { document.getElementById('eventIdPokedex').value = ev; document.getElementById('eventIdTop').value = ev; document.getElementById('eventIdFame').value = ev; }
             if (params.get('wcaid')) { document.getElementById('wcaIdPokedex').value = wcaid; document.getElementById('wcaIdCompetidor').value = wcaid; }
@@ -426,6 +450,7 @@
                 if (tab === 'fame') cargarHallOfFame();
             }
         });
+        // ──────────────────────────────────────────────────────────
 
         function guardarReciente(wcaId) {
             let recents = JSON.parse(localStorage.getItem('wcaRecents') || '[]');
@@ -597,10 +622,12 @@
             document.getElementById('modal-overlay').style.display = 'flex';
         }
 
+        // ─── MODIFICADO: mostrarHistorialBisagras ─────────────────
         function mostrarHistorialBisagras(wcaId, eventId) {
             const payload = apiCache.get(wcaId);
             if (!payload) return;
             const data = payload.data;
+            const tipo = getTipo(); // NUEVO
             let tiemposSet = new Set();
             let historial = [];
             let compsCronologicas = data.slice();
@@ -608,8 +635,15 @@
             for (let comp of compsCronologicas) {
                 if (comp.event_id !== eventId) continue;
                 let intentos = [];
-                if (comp.attempts) { intentos = comp.attempts.filter(x => x > 0); }
-                if (comp.best > 0 && intentos.length === 0) { intentos = [comp.best]; }
+
+                // MODIFICADO: fuente de tiempos según tipo
+                if (tipo === 'avg') {
+                    if (comp.average > 0) intentos = [comp.average];
+                } else {
+                    if (comp.attempts) { intentos = comp.attempts.filter(x => x > 0); }
+                    if (comp.best > 0 && intentos.length === 0) { intentos = [comp.best]; }
+                }
+                
                 
                 for (let int of intentos) {
                     if (tiemposSet.has(int)) continue; 
@@ -647,6 +681,7 @@
             document.getElementById('modal-texto').innerHTML = html;
             document.getElementById('modal-overlay').style.display = 'flex';
         }
+        // ──────────────────────────────────────────────────────────
 
         function mostrarHistorialBisagrasColectivo() {
             if (!statsColectivosActuales) return;
@@ -761,11 +796,14 @@
             return payload;
         }
 
+        // ─── MODIFICADO: generarPokedex ───────────────────────────
         async function generarPokedex() {
             const modo = document.getElementById('agrupacionSelect').value;
             const eventId = document.getElementById('eventIdPokedex').value;
             const resDiv = document.getElementById('resPokedex');
             const mostrarBisagra = document.getElementById('checkBisagra').checked;
+            const tipo = getTipo(); // NUEVO
+            const tipoLabel = tipo === 'avg' ? 'Medias' : 'Singles'; // NUEVO
 
             if (modo === 'individual') {
                 const wcaId = document.getElementById('wcaIdPokedex').value.trim().toUpperCase();
@@ -773,16 +811,26 @@
 
                 try {
                     const { data, personName } = await fetchWCA(wcaId); guardarReciente(wcaId);
-                    let tiemposConseguidos = new Map(); 
+                    let tiemposConseguidos = new Map();
+
+                    // ─── MODIFICADO: rama single vs avg ───────────
                     data.slice().reverse().forEach(comp => {
                         if(comp.event_id === eventId) {
                             let nombreComp = comp.competition_id;
-                            if(comp.attempts) { comp.attempts.forEach(i => { if(i > 0) { if(!tiemposConseguidos.has(i)) tiemposConseguidos.set(i, new Set()); tiemposConseguidos.get(i).add(nombreComp); } }); }
-                            if(comp.best > 0) { if(!tiemposConseguidos.has(comp.best)) tiemposConseguidos.set(comp.best, new Set()); tiemposConseguidos.get(comp.best).add(nombreComp); }
+                            if (tipo === 'avg') {
+                                if (comp.average > 0) {
+                                    if(!tiemposConseguidos.has(comp.average)) tiemposConseguidos.set(comp.average, new Set());
+                                    tiemposConseguidos.get(comp.average).add(nombreComp);
+                                }
+                            } else {
+                                if(comp.attempts) { comp.attempts.forEach(i => { if(i > 0) { if(!tiemposConseguidos.has(i)) tiemposConseguidos.set(i, new Set()); tiemposConseguidos.get(i).add(nombreComp); } }); }
+                                if(comp.best > 0) { if(!tiemposConseguidos.has(comp.best)) tiemposConseguidos.set(comp.best, new Set()); tiemposConseguidos.get(comp.best).add(nombreComp); }
+                            }  
                         }
                     });
+                    // ──────────────────────────────────────────────
 
-                    if(tiemposConseguidos.size === 0) { resDiv.innerHTML = `<p class='error'>No hay marcas oficiales para ${personName} (${wcaId}) en esta categoría.</p>`; return; }
+                    if(tiemposConseguidos.size === 0) { resDiv.innerHTML = `<p class='error'>No hay ${tipoLabel.toLowerCase()} oficiales para ${personName} (${wcaId}) en esta categoría.</p>`; return; }
 
                     const arrayTiempos = Array.from(tiemposConseguidos.keys()).sort((a, b) => a - b);
                     const racha = calcularRachas(arrayTiempos);
@@ -816,7 +864,7 @@
                                 <a href="https://www.worldcubeassociation.org/persons/${wcaId}" target="_blank" class="profile-link" title="Ver perfil oficial WCA">${personName} (${wcaId})</a>
                                 <button class="btn-secondary" style="padding: 4px 8px; font-size: 0.7em; margin-left: 10px;" onclick="irACompetidor('${wcaId}')" title="Ver todos los rangos">📊</button>
                             </div>
-                            <strong>Evento:</strong> ${nombreEvento}<br>
+                            <strong>Evento:</strong> ${nombreEvento} &nbsp;·&nbsp; <strong>Tipo:<strong> ${tipoLabel}<br>
                             <strong>Completado:</strong> ${tiemposConseguidos.size} / ${totalPosibles} (${porcentaje}%) <br>
                             <strong>Antirrango:</strong> <span style="color: #4CAF50;">${formatCS(antirrango)}s</span><br>
                             <div style="margin-top: 5px;">
@@ -846,11 +894,20 @@
                 } catch(error) { resDiv.innerHTML = `<p class='error'>Error: ${error.message}</p>`; }
                 
             } else {
+                // ─── modo colectivo ───────────────────────────────
                 resDiv.innerHTML = `<p class='loading'>Consultando archivos de la comunidad...</p>`;
 
                 try {
-                    const req = await fetch(`collective_${eventId}.json?v=${Date.now()}`);
-                    if (!req.ok) throw new Error("Aún no hay datos colectivos subidos por Python para este evento.");
+                    // MODIFICADO: elegir JSON según tipo
+                    const jsonFile = tipo === 'avg'
+                        ? `collective_avg_${eventId}.json`
+                        : `collective_${eventId}.json`;
+                    const req = await fetch(`${jsonFile}?v=${Date.now()}`);
+                    if (!req.ok) throw new Error(
+                        tipo === 'avg'
+                            ? "Los datos de medias colectivas aún no están disponibles para este evento."
+                            : "Aún no hay datos colectivos subidos por Python para este evento."
+                    );
                     const data = await req.json();
                     
                     let statsRegion; let nombreRegion = "";
@@ -892,7 +949,7 @@
 
                     let statsHtml = `
                         <div class="stats">
-                            <h2 style="margin:0 0 10px 0; color:#4CAF50;">Pokédex de ${nombreRegion}</h2>
+                            <h2 style="margin:0 0 10px 0; color:#4CAF50;">Pokédex de ${nombreRegion} · ${tipoLabel}</h2>
                             <strong>Completado:</strong> ${arrayTiempos.length} / ${totalPosibles} (${((arrayTiempos.length / totalPosibles) * 100).toFixed(1)}%) <br>
                             <strong>Rango Colectivo:</strong> <span style="color: #ce93d8;">${formatCS(rachaCol.rango)}s (${formatCS(rachaCol.min)} - ${formatCS(rachaCol.max)})</span>
                             <div style="margin-top: 5px;">
@@ -926,6 +983,7 @@
                 } catch (err) { resDiv.innerHTML = `<p class='error'>Error: ${err.message}</p>`; }
             }
         }
+        // ──────────────────────────────────────────────────────────
 
         function scrollToRango() {
             const element = document.querySelector('.inicio-rango');
@@ -935,19 +993,23 @@
             }
         }
 
+        // ─── MODIFICADO: cargarTop1000 ────────────────────────────
         async function cargarTop1000() {
             const modo = document.getElementById('agrupacionSelect').value;
             const eventId = document.getElementById('eventIdTop').value;
             const resDiv = document.getElementById('resTop1000');
+            const tipo = getTipo();
             actualizarURL();
             
             if (modo === 'Mundial') { resDiv.innerHTML = `<p class='error'>El modo Mundial no tiene divisiones internas para comparar rangos en esta pestaña.</p>`; return; }
 
             if (modo === 'individual') {
-                resDiv.innerHTML = `<p class='loading'>Cargando ranking individual...</p>`;
+                resDiv.innerHTML = `<p class='loading'>Cargando ranking individual de ${tipo === 'avg' ? 'medias' : 'singles'}...</p>`;
                 try {
-                    const response = await fetch(`ranking_${eventId}.txt?v=${Date.now()}`);
-                    if(!response.ok) throw new Error(`Ranking no disponible`);
+                    // MODIFICADO: archivo según tipo
+                    const prefijo = tipo === 'avg' ? 'ranking_avg_' : 'ranking_';
+                    const response = await fetch(`${prefijo}${eventId}.txt?v=${Date.now()}`);
+                    if(!response.ok) throw new Error(`Ranking de ${tipo === 'avg' ? 'medias' : 'singles'} no disponible para este evento`);
                     const text = await response.text();
                     datosRankingGlobal = [];
                     const regex = /^(\d+)\.\s+(.*?)\s+\(([A-Z0-9]+)\.\s+(.*?)\.\s+(.*?)\)\s+-\s+([0-9.]+)s\s+\((.*?)\)/i;
@@ -963,7 +1025,9 @@
             } else {
                 resDiv.innerHTML = `<p class='loading'>Calculando rankings de la región...</p>`;
                 try {
-                    const req = await fetch(`collective_${eventId}.json?v=${Date.now()}`);
+                    // MODIFICADO: JSON según tipo
+                    const jsonFile = tipo === 'avg' ? `collective_avg_${eventId}.json` : `collective_${eventId}.json`
+                    const req = await fetch(`${jsonFile}?v=${Date.now()}`);
                     if (!req.ok) throw new Error("No hay datos colectivos.");
                     const data = await req.json();
                     
@@ -990,6 +1054,7 @@
                 } catch(error) { resDiv.innerHTML = `<p class='error'>Error: ${error.message}</p>`; }
             }
         }
+        // ──────────────────────────────────────────────────────────
 
         function filtrarTop() {
             const modo = document.getElementById('agrupacionSelect').value;
@@ -1091,9 +1156,11 @@
             resDiv.innerHTML = html;
         }
 
+        // ─── MODIFICADO: cargarCompetidor ─────────────────────────
         async function cargarCompetidor() {
             const modo = document.getElementById('agrupacionSelect').value;
             const resDiv = document.getElementById('resCompetidor');
+            const tipo = getTipo();
             
             if (modo === 'Mundial') { resDiv.innerHTML = `<p class='error'>Esta pestaña compara regiones con sus superiores. En modo Mundial no hay nada por encima.</p>`; return; }
             
@@ -1102,17 +1169,24 @@
             if (modo === 'individual') {
                 const wcaId = document.getElementById('wcaIdCompetidor').value.trim().toUpperCase();
                 if(!wcaId) return; actualizarURL();
-                resDiv.innerHTML = "<p class='loading'>Escaneando historial completo y cruzando rankings locales...</p>";
+                resDiv.innerHTML = `<p class='loading'>Escaneando historial completo y cruzando rankings locales de ${tipo === 'avg' ? 'medias' : 'singles'}...</p>`;
 
                 try {
                     const { data, personName } = await fetchWCA(wcaId); guardarReciente(wcaId);
                     let evtMap = {};
+
+                    // MODIFICADO: usar average o attempts según tipo
                     data.forEach(c => {
                         let ev = c.event_id;
                         if(['333fm', '333mbf'].includes(ev)) return;
                         if(!evtMap[ev]) evtMap[ev] = new Set();
-                        if(c.attempts) c.attempts.forEach(i => { if(i > 0) evtMap[ev].add(i); });
-                        if(c.best > 0) evtMap[ev].add(c.best);
+                        if (tipo === 'avg') {
+                            if(c.average > 0) evtMap[ev].add(c.average);
+                        } else {
+                            if(c.attempts) c.attempts.forEach(i => { if(i > 0) evtMap[ev].add(i); });
+                            if(c.best > 0) evtMap[ev].add(c.best);
+                        }
+                        
                     });
 
                     let resultados = [];
@@ -1123,14 +1197,16 @@
                         resultados.push({ev, racha, global: "-", national: "-", continental: "-", country: "Todos", continent: "Todos"});
                     }
 
-                    if(resultados.length === 0) { resDiv.innerHTML = `<p class='error'>No se encontraron marcas válidas para ${personName} (${wcaId}).</p>`; return; }
+                    if(resultados.length === 0) { resDiv.innerHTML = `<p class='error'>No se encontraron ${tipo === 'avg' ? 'medias válidas' : 'singles válidos'} para ${personName} (${wcaId}).</p>`; return; }
 
                     resultados.sort((a, b) => orden.indexOf(a.ev) - orden.indexOf(b.ev));
 
                     await Promise.all(resultados.map(async (r) => {
                         if(r.racha.rango === 0) return;
                         try {
-                            const resArchivo = await fetch(`ranking_${r.ev}.txt?v=${Date.now()}`);
+                            // MODIFICADO: archivo según tipo
+                            const prefijo = tipo === 'avg' ? 'ranking_avg_' : 'ranking_';
+                            const resArchivo = await fetch(`${prefijo}{r.ev}.txt?v=${Date.now()}`);
                             if (resArchivo.ok) {
                                 const txt = await resArchivo.text(); const lines = txt.split('\n');
                                 let userIndex = lines.findIndex(l => l.includes(`(${wcaId}.`));
@@ -1180,11 +1256,14 @@
                     resDiv.innerHTML = tableHtml + `</table>`;
                 } catch(error) { resDiv.innerHTML = `<p class='error'>Error: ${error.message}</p>`; }
             } else {
+                // modo colectivo Nacional/Continental
                 const seleccion = document.getElementById('regionColectiva').value;
-                resDiv.innerHTML = `<p class='loading'>Escaneando los 15 eventos para ${seleccion.replace('_','🌍 ')}...</p>`;
+                resDiv.innerHTML = `<p class='loading'>Escaneando los 15 eventos para ${seleccion.replace('_','🌍 ')} (${tipo === 'avg' ? 'medias' : 'avg'})...</p>`;
                 
                 try {
-                    let promesas = orden.map(ev => fetch(`collective_${ev}.json?v=${Date.now()}`).then(r=>r.json()).catch(()=>null));
+                    // MODIFICADO: JSON según tipo
+                    const jsonPrefijo = tipo === 'avg' ? 'collective_avg_' : 'collective_';
+                    let promesas = orden.map(ev => fetch(`${jsonPrefijo}${ev}.json?v=${Date.now()}`).then(r=>r.json()).catch(()=>null));
                     let jsons = await Promise.all(promesas);
                     
                     let tableHtml = `<h2 style="margin-bottom: 15px; color:#4CAF50;">Rendimiento Global de ${seleccion.replace('_','')}</h2>`;
@@ -1237,16 +1316,21 @@
                 } catch(error) { resDiv.innerHTML = `<p class='error'>Error: ${error.message}</p>`; }
             }
         }
+        // ──────────────────────────────────────────────────────────
 
+        // ─── MODIFICADO: cargarHallOfFame ─────────────────────────
         async function cargarHallOfFame() {
             const modo = document.getElementById('agrupacionSelect').value;
             const ev = document.getElementById('eventIdFame').value;
             const tipoFama = document.getElementById('fameTypeSelect').value;
             const resDiv = document.getElementById('resFame');
+            const tipo = getTipo(); // NUEVO
             
             resDiv.innerHTML = "<p class='loading'>Cargando Hall of Fame...</p>";
             try {
-                const req = await fetch(`collective_${ev}.json?v=${Date.now()}`);
+                // MODIFICADO: JSON según tipo
+                const jsonFile = tipo === 'avg' ? `collective_avg_${ev}.json` : `collective_${ev}.json`;
+                const req = await fetch(`${jsonFile}.json?v=${Date.now()}`);
                 if(!req.ok) throw new Error("Datos no disponibles");
                 const data = await req.json();
                 
@@ -1265,6 +1349,7 @@
                 pintarFame();
             } catch(e) { resDiv.innerHTML = `<p class='error'>Error: ${e.message}</p>`; }
         }
+        // ──────────────────────────────────────────────────────────
 
         function pintarFame() {
             const resDiv = document.getElementById('resFame');
