@@ -99,6 +99,57 @@ def main():
                     
                 # Inyectamos el continente: (2014LOPE04. Spain. _Europe)
                 f.write(f"{current_rank}. {row['person_name']} ({row['person_id']}. {row['person_country_id']}. {row['continent_id']}) - {row['rango']/100:.2f}s ({row['min_val']/100:.2f}-{row['max_val']/100:.2f}) | AR: {row['antirrango']/100:.2f}s\n")
+   
+    # ── MEDIAS (NUEVO) ────────────────────────────────────────────────────
+    # Las medias ya están en el campo 'average' de Results: no hay que hacer
+    # join con result_attempts, lo que hace este bloque significativamente más rápido.
+    print("\n--- MEDIAS ---")
+    for evento in EVENTOS:
+        print(f"Procesando MEDIA {evento.upper()}...")
+        archivo_salida = os.path.join(CARPETA_SALIDA, f'ranking_avg_{evento}.txt')
+
+        df = (
+            pl.scan_csv(RESULTS_FILE, separator='\t', ignore_errors=True)
+            .filter(pl.col('event_id') == evento)
+            .filter(pl.col('average') > 0)
+            .select(['person_name', 'person_id', 'person_country_id', 'average'])
+            .collect()
+        )
+        if df.height == 0: continue
+
+        # Join con países para obtener continent_id
+        df = df.join(countries_df, left_on='person_country_id', right_on='id', how='left')
+
+        # Deduplicar: un competidor puede repetir la misma media en distintas comps
+        df_unique = df.unique(subset=['person_id', 'average']).sort(['person_id', 'average'])
+
+        df_abs = df_unique.group_by('person_id').agg(
+            min_abs = pl.col('average').min(),
+            max_abs = pl.col('average').max()
+        ).with_columns(antirrango = pl.col('max_abs') - pl.col('min_abs'))
+
+        df_grouped = df_unique.with_columns(
+            grupo = pl.col('average') - pl.int_range(0, pl.len()).over('person_id')
+        )
+
+        df_streaks = df_grouped.group_by(['person_id', 'person_name', 'person_country_id', 'continent_id', 'grupo']).agg(
+            min_val = pl.col('average').min(),
+            max_val = pl.col('average').max()
+        )
+        df_streaks = df_streaks.with_columns(rango = pl.col('max_val') - pl.col('min_val'))
+        df_streaks = df_streaks.filter(pl.col('rango') > 0)
+
+        ranking = df_streaks.sort('rango', descending=True).group_by('person_id', maintain_order=True).first()
+        ranking = ranking.join(df_abs, on='person_id', how='left')
+        ranking = ranking.sort('rango', descending=True)
+
+        with open(archivo_salida, 'w', encoding='utf-8') as f:
+            f.write(f"--- RANKING COMPLETO: MAYOR RANGO CONSECUTIVO EN MEDIAS DE {evento.upper()} ---\n\n")
+            current_rank = 1; last_rango = -1
+            for i, row in enumerate(ranking.iter_rows(named=True), 1):
+                if row['rango'] != last_rango:
+                    current_rank = i; last_rango = row['rango']
+                f.write(f"{current_rank}. {row['person_name']} ({row['person_id']}. {row['person_country_id']}. {row['continent_id']}) - {row['rango']/100:.2f}s ({row['min_val']/100:.2f}) || AR: {row['antirrango']/100:.2f}s\n")
 
     print(f"\nProceso completado en {time.time() - start_time:.2f} segundos.")
 
