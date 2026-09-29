@@ -2,6 +2,7 @@ import csv
 import json
 import os
 import glob
+import gc
 from collections import defaultdict
 
 EVENTOS_VALIDOS = {'333', '222', '444', '555', '666', '777', '333bf', '333oh', 'clock', 'minx', 'pyram', 'skewb', 'sq1', '444bf', '555bf'}
@@ -42,9 +43,14 @@ def procesar_datos():
         for row in reader:
             paises_continentes[row['id']] = row['continent_id']
 
-    print("Procesando tabla principal de Results...")
+    # ══════════════════════════════════════════════════════════════
+    # FASE 1: SINGLES — se procesa y se libera ANTES de tocar medias.
+    # No mantener ambos datasets vivos a la vez es la clave: Attempts.tsv
+    # es la tabla más grande de todo el export WCA.
+    # ══════════════════════════════════════════════════════════════
+    print("\n=== FASE 1: SINGLES ===")
+    print("Procesando tabla principal de Results (singles)...")
     resultados_brutos = defaultdict(list) # singles (intentos individuales)
-    resultados_brutos_avg = defaultdict(list) # NUEVO: medias
     result_info = {}
     
     with open(RESULTS_FILE, 'r', encoding='utf-8') as f:
@@ -65,29 +71,19 @@ def procesar_datos():
             result_info[res_id] = (ev, wca_id, pais, continente, comp_id, fecha, pname)
             
             # Singles: rescatar el 'best' oficial
-            b = int(row.get('best', '0'))
+            b = int(row.get('best', '0') or '0')
             if b > 0:
                 resultados_brutos[ev].append({
                     'time': b, 'wca_id': wca_id, 'pais': pais, 'continente': continente, 
                     'comp_id': comp_id, 'fecha': fecha, 'personName': pname
                 })
 
-            # NUEVO: Medias - leer campo 'average' directamente de Results
-            avg_val = int(row.get('average', '0') or '0')
-            if avg_val > 0:
-                resultados_brutos_avg[ev].append({
-                    'time': avg_val, 'wca_id': wca_id, 'pais': pais, 'continente': continente,
-                    'comp_id': comp_id, 'fecha': fecha, 'personName': pname
-                })
-
-    # Leer intentos individuales (solo para singles)
     if ATTEMPTS_FILE and os.path.exists(ATTEMPTS_FILE):
         print(f"Procesando tabla secundaria de Intentos ({ATTEMPTS_FILE})...")
         with open(ATTEMPTS_FILE, 'r', encoding='utf-8') as f:
             reader = csv.DictReader(f, delimiter='\t')
             for row in reader:
                 res_id = row['result_id']
-                # Cruzamos el intento con la información del competidor y torneo
                 if res_id in result_info:
                     val = row.get('value', '0')
                     if val.lstrip('-').isdigit():
@@ -99,13 +95,51 @@ def procesar_datos():
                                 'comp_id': info[4], 'fecha': info[5], 'personName': info[6]
                             })
     else:
-        print("AVISO: No se encontró la tabla result_attempts. Faltarán tiempos.")
+        print("AVISO: No se encontró la tabla result_attempts. Faltarán tiempos de singles.")
 
-    # Liberar la RAM 
     result_info.clear()
+    del result_info
+    gc.collect()
+
+    procesar_lote(resultados_brutos, '', 'singles', paises_continentes)
+
+    # Liberamos TODO lo de singles antes de empezar con medias
+    resultados_brutos.clear()
+    del resultados_brutos
+    gc.collect()
+
+    # ══════════════════════════════════════════════════════════════
+    # FASE 2: MEDIAS — relee Results.tsv desde cero. NO toca
+    # result_attempts.tsv, así que es mucho más ligera en memoria
+    # que la fase de singles.
+    # ══════════════════════════════════════════════════════════════
+    print("\n=== FASE 2: MEDIAS ===")
+    print("Procesando tabla principal de Results (medias)...")
+    resultados_brutos_avg = defaultdict(list)
+
+    with open(RESULTS_FILE, 'r', encoding='utf-8') as f:
+        reader = csv.DictReader(f, delimiter='\t')
+        for row in reader:
+            ev = row['event_id']
+            if ev not in EVENTOS_VALIDOS: continue
+
+            avg_val = int(row.get('average', '0') or '0')
+            if avg_val <= 0: continue
+
+            wca_id = row['person_id']
+            pais = row['person_country_id']
+            continente = paises_continentes.get(pais, "Unknown")
+            comp_id = row['competition_id']
+            fecha = comps.get(comp_id, "9999-99-99")
+            pname = row['person_name']
+
+            resultados_brutos_avg[ev].append({
+                'time': avg_val, 'wca_id': wca_id, 'pais': pais, 'continente': continente,
+                'comp_id': comp_id, 'fecha': fecha, 'personName': pname
+            })
 
     # ── Función reutilizable para procesar un lote de solves ──────────────
-    def procesar_lote(solves_dict, sufijo_archivo, etiqueta):
+    def procesar_lote(solves_dict, sufijo_archivo, etiqueta, paises_continentes):
         for evento, solves in solves_dict.items():
             print(f"Calculando {etiqueta} {evento}...")
             solves.sort(key=lambda x: x['fecha'])
@@ -171,15 +205,17 @@ def procesar_datos():
             nombre_archivo = f'collective{sufijo_archivo}_{evento}.json'
             with open(nombre_archivo, 'w', encoding='utf-8') as f:
                 json.dump(datos_colectivos, f)
+
+            del datos_colectivos # liberar antes del siguiente evento (333 puede ser muy grande)
     # ─────────────────────────────────────────────────────────────────────
 
-    # Generar collective_{ev}.json (singles)
-    procesar_lote(resultados_brutos, '', 'singles')
+    procesar_lote(resultados_brutos_avg, '_avg', 'medias', paises_continentes)
 
-    # NUEVO: Generar collective_avg_{ev}.json (medias)
-    procesar_lote(resultados_brutos_avg, '_avg', 'medias')
+    resultados_brutos_avg.clear()
+    del resultados_brutos_avg
+    gc.collect()
             
-    print("¡Completado!")
+    print("\n¡Completado!")
 
 if __name__ == "__main__":
     procesar_datos()
