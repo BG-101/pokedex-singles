@@ -81,7 +81,7 @@ def procesar_lote(solves_dict, sufijo_archivo, etiqueta, paises_continentes):
             if t not in datos_colectivos['Nacional'][p]['tiempos']:
                 datos_colectivos['Nacional'][p]['tiempos'][t] = {'fecha': s.fecha, 'descubridores': [persona], 'comps': [s.comp_id]}
                 datos_colectivos['Nacional'][p]['hall_of_fame_individuals'][persona] += 1
-            elif s['fecha'] == datos_colectivos['Nacional'][p]['tiempos'][t]['fecha'] and persona not in datos_colectivos['Nacional'][p]['tiempos'][t]['descubridores']:
+            elif s.fecha == datos_colectivos['Nacional'][p]['tiempos'][t]['fecha'] and persona not in datos_colectivos['Nacional'][p]['tiempos'][t]['descubridores']:
                 datos_colectivos['Nacional'][p]['tiempos'][t]['descubridores'].append(persona)
                 datos_colectivos['Nacional'][p]['tiempos'][t]['comps'].append(s.comp_id)
                 datos_colectivos['Nacional'][p]['hall_of_fame_individuals'][persona] += 1
